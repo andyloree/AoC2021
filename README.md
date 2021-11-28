@@ -12,3 +12,11 @@
 - [Rust extension](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust)
 - [CodeLLDB extension](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb) for debugging
 - Update `rust-client.rustupPath` pathin workspace settings.json to point to your wsl install path (`/home/<user>/.cargo/bin/rustup`)
+
+## New Day
+```bash
+cargo new aoc-2021-day-#
+cd aoc-2021-day-#
+code .
+```
+`F5` then say yes to the Cargo.toml workspace configuration
