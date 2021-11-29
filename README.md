@@ -20,3 +20,8 @@ cd aoc-2021-day-#
 code .
 ```
 `F5` then say yes to the Cargo.toml workspace configuration
+
+# Standard IO redirection with Run in vscode
+Somewhat difficult to find, but [CodeLLDB allows for standard IO redirection](https://github.com/vadimcn/vscode-lldb/blob/master/MANUAL.md#stdio-redirection) using the `stdio` in the launch.json.
+  - stdin only: `"stdio": ["input.txt"]`
+  - stdout and stderr: `"stdio": [null, "out.txt", "err.txt"]`
