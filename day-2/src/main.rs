@@ -10,11 +10,11 @@ fn main() {
     lines.iter().for_each(|line| {
         let mut command = line.split_whitespace();
         let direction = command.next().unwrap();
-        let dim = command.next().unwrap().parse::<i32>().unwrap();
+        let magnitude = command.next().unwrap().parse::<i32>().unwrap();
         match direction {
-            "forward" => horizontal += dim,
-            "up" => depth -= dim,
-            "down" => depth += dim,
+            "forward" => horizontal += magnitude,
+            "up" => depth -= magnitude,
+            "down" => depth += magnitude,
             _ =>  println!("Throw the switch Vern, she's pumping mud")
         }
     });
@@ -30,11 +30,11 @@ fn main() {
     lines.iter().for_each(|line| {
         let mut command = line.split_whitespace();
         let direction = command.next().unwrap();
-        let dim = command.next().unwrap().parse::<i32>().unwrap();
+        let magnitude = command.next().unwrap().parse::<i32>().unwrap();
         match direction {
-            "forward" => {horizontal += dim;  depth += aim * dim},
-            "up" => aim -= dim,
-            "down" => aim += dim,
+            "forward" => {horizontal += magnitude;  depth += aim * magnitude},
+            "up" => aim -= magnitude,
+            "down" => aim += magnitude,
             _ =>  println!("Throw the switch Vern, she's pumping mud")
         }
     });
