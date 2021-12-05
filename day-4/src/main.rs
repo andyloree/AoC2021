@@ -1,15 +1,18 @@
 use std::io::{self, BufRead};
 use std::collections::HashMap;
+use std::collections::LinkedList;
+use std::time::{Duration, Instant};
 
 #[derive(Debug,Clone)]
 struct BingoBoard {
+    board_num: usize,
     numbers: HashMap<i16, usize>,
     called: u32
 }
 
 impl BingoBoard {
-    fn from_stdin(stdin: &std::io::Stdin) -> Option<BingoBoard> {
-        let mut new_board = BingoBoard { numbers: HashMap::with_capacity(25), called: 0 };
+    fn from_stdin(stdin: &std::io::Stdin, board_num: usize) -> Option<BingoBoard> {
+        let mut new_board = BingoBoard { board_num: board_num, numbers: HashMap::with_capacity(25), called: 0 };
         stdin.lock().lines().skip(1);
         // fill board
         for row in 0..6 {
@@ -63,35 +66,53 @@ impl BingoBoard {
     }
 }
 
-fn first_winning_board(numbers: Vec<i16>,mut boards: Vec<BingoBoard>) -> Option<(usize,i32,i16)> {
-    for number in numbers {
+fn first_winning_board(numbers: &mut LinkedList<i16>,boards: &mut Vec<BingoBoard>) -> Option<(usize,usize,i32,i16)> {
+    while let Some(number) = numbers.front() {
         for i in 0..boards.len() {
-            if boards[i].call_number(number) {
-                let score = boards[i].score();
-                return Some((i,score,number));
+            if boards[i].call_number(*number) {
+                return Some((i,boards[i].board_num,boards[i].score(),*number));
             }
         }
+        // All boards updated
+        numbers.pop_front();
     }
     return None;
 }
 
 fn main() {
+    let start = Instant::now();
     let stdin = io::stdin();
-    let numbers: Vec<i16> = stdin.lock().lines().next().unwrap().unwrap().split(",").flat_map(|s| s.trim().parse::<i16>()).collect();
+    let mut numbers: LinkedList<i16> = stdin.lock().lines().next().unwrap().unwrap().split(",").flat_map(|s| s.trim().parse::<i16>()).collect();
 
     let mut boards: Vec<BingoBoard> = vec!();
-    while let Some(board) = BingoBoard::from_stdin(&stdin) {
+    while let Some(board) = BingoBoard::from_stdin(&stdin, boards.len() + 1) {
         boards.push(board);
     }
-    println!("Number of boards: {0}", boards.len());
 
-    println!("Part 1\r\n{}", "-".repeat(10));
-    if let Some((winner_idx,unchecked_sum,last_number)) = first_winning_board(numbers, boards) {
-        println!("Winning board #{}, Unchecked Sum: {}, Last number: {}, Score: {}"
-                    ,winner_idx + 1, unchecked_sum, last_number, unchecked_sum * (last_number as i32));
+    let mut winners: Vec<(usize,usize,i32,i16)> = vec!();
+    let mut first: bool = true;
+    while boards.len() > 0 {
+        if let Some((winner_idx,board_num,unchecked_sum,last_number)) = first_winning_board(&mut numbers, &mut boards) {
+            winners.push((winner_idx,board_num,unchecked_sum,last_number));   // save winners
+            boards.remove(winner_idx);  // remove the winner from future numbers, we know it won already
+            if first {
+                println!("Part 1\r\n{}", "-".repeat(10));
+                println!("Winning board #{}, Unchecked Sum: {}, Last number: {}, Score: {}\r\n"
+                            ,board_num, unchecked_sum, last_number, unchecked_sum * (last_number as i32));
+                first = false;
+            }
+
+            if boards.len() == 0 {
+                println!("Part 2\r\n{}", "-".repeat(10));
+                println!("Last Winning board #{}, Unchecked Sum: {}, Last number: {}, Score: {}\r\n"
+                            ,board_num, unchecked_sum, last_number, unchecked_sum * (last_number as i32));
+            }
+        }
+        else
+        {
+            println!("Sad panda...no winner found");
+        }
     }
-    else
-    {
-        println!("Sad panda...no winner found");
-    }
+    let duration = start.elapsed();
+    println!("Total execution time: {:?}", duration);
 }
