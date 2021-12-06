@@ -3,11 +3,8 @@ use std::time::{Duration, Instant};
 
 fn num_fish_by_days(num_days: usize, fish_by_days: &mut [i64;9]) -> i64 {
     for day in 1..num_days+1 {
-        let split = fish_by_days[0];
-        fish_by_days[0] = 0;
         fish_by_days.rotate_left(1);
-        fish_by_days[6] += split;
-        fish_by_days[8] += split;
+        fish_by_days[6] += fish_by_days[8];
     }
     return fish_by_days.iter().sum::<i64>();
 }
