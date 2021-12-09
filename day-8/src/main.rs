@@ -18,20 +18,26 @@ fn signal_to_bits(signal: &str) -> u8 {
     return bits;
 }
 
-
-fn count_unique_digits(line: String, digits_counts: &mut [i32;7]) -> (i32, i32) {
+fn count_unique_digits(line: &String, digits_counts: &mut [i32;7]) -> i32 {
     let mut wires = line.split("|");
     let signals: Vec<&str> = wires.next().unwrap().split(" ").filter(|val| val.len() > 0).collect::<Vec<&str>>();
     let digits: Vec<&str> = wires.next().unwrap().split(" ").filter(|val| val.len() > 0).collect::<Vec<&str>>();
     let mut unqiue_digits = 0;
     digits.iter().map(|digit| digit.len() as i32)
-            .filter(|&len| len > 0)
             .for_each(|len| {
                 digits_counts[(len as usize) - 1] += 1;
                 if len >= 2 && len <= 4 || len == 7 {
                     unqiue_digits += 1;
                 }
             });
+    return unqiue_digits;
+}
+
+
+fn map_segments_to_output(line: &String) -> i32 {
+    let mut wires = line.split("|");
+    let signals: Vec<&str> = wires.next().unwrap().split(" ").filter(|val| val.len() > 0).collect::<Vec<&str>>();
+    let digits: Vec<&str> = wires.next().unwrap().split(" ").filter(|val| val.len() > 0).collect::<Vec<&str>>();
 
     let mut segment_map: [u8;10] = [0;10];
     let unique_signals: Vec<&str> = signals.iter().filter(|signal| signal.len() >= 2 && signal.len() <= 4 || signal.len() == 7).map(|s| s.as_ref()).collect();
@@ -80,19 +86,11 @@ fn count_unique_digits(line: String, digits_counts: &mut [i32;7]) -> (i32, i32) 
     }
     assert_eq!(segment_map.into_iter().filter(|&has_bits| has_bits > 0).count(),10);
 
-    // map our digits from segments
-    let mut output: i32 = 0;
-    for idx in 0..digits.len() {
-        let bits = signal_to_bits(digits[idx]);
-        for digit_value in 0..10 {
-            if segment_map[digit_value] == bits {
-                output += (digit_value as i32) * i32::pow(10, 3 - idx as u32);
-                break;
-            }
-        }
-
-    }
-    return (unqiue_digits, output);
+    // map our digits from segments, shifting digits by 10's place
+    let output: i32 = digits.iter().map(|digit| signal_to_bits(digit)).enumerate().map(|(idx,bits)| {
+        (segment_map.iter().position(|&value| value == bits).unwrap() as i32) * i32::pow(10, 3 - idx as u32)
+    }).sum::<i32>();
+    return output;
 }
 
 
@@ -105,19 +103,16 @@ fn main() {
     let mut unique_total: i32 = 0;
     let mut output_total: i32 = 0;
     lines.into_iter().for_each(|line| {
-        let (unique_count, output) = count_unique_digits(line, &mut counts);
-        unique_total += unique_count;
-        output_total += output;
+        unique_total += count_unique_digits(&line, &mut counts);
+        output_total += map_segments_to_output(&line);
     });
 
     println!("Part 1\r\n{}", "-".repeat(10));
     println!("Unique Counts: {:?}", counts);
     println!("Total: {:?}\r\n", unique_total);
-    // todo
 
     println!("Part 2\r\n{}", "-".repeat(10));
     println!("Output: {:?}\r\n", output_total);
-    // todo
 
     let duration = start.elapsed();
     println!("Total execution time: {:?}", duration);
