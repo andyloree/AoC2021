@@ -31,7 +31,7 @@
 5. Update `src/main.rs` with the template:
     ```rust
     use std::io::{self, BufRead};
-    use std::time::{Duration, Instant};
+    use std::time::{Instant};
 
     fn main() {
         let start = Instant::now();
