@@ -1,21 +1,22 @@
 use std::io::{self, BufRead};
 use std::time::{Instant};
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 struct DistanceMatch {
     num_matched: usize,
-    a_beacon_idx: usize,
-    b_beacon_idx: usize,
+    a_Point_idx: usize,
+    b_Point_idx: usize,
     b_rotation: usize
 }
 
 impl Ord for DistanceMatch {
     fn cmp(&self, other: &DistanceMatch) -> Ordering {
         self.num_matched.cmp(&other.num_matched)
-            .then_with(|| self.a_beacon_idx.cmp(&other.a_beacon_idx))
-            .then_with(|| self.b_beacon_idx.cmp(&other.b_beacon_idx))
+            .then_with(|| self.a_Point_idx.cmp(&other.a_Point_idx))
+            .then_with(|| self.b_Point_idx.cmp(&other.b_Point_idx))
             .then_with(|| self.b_rotation.cmp(&other.b_rotation))
     }
 }
@@ -30,35 +31,36 @@ impl PartialOrd for DistanceMatch {
 #[derive(Debug)]
 struct Scanner {
     name: String,
-    beacons: Vec<Beacon>
+    becons: Vec<Point>,
+    location: Point
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-struct Beacon {
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
+struct Point {
     x: i32,
     y: i32,
     z: i32
 }
 
-impl Beacon {
+impl Point {
     fn new(line: &String) -> Self {
         let s = line.split(",").collect::<Vec<_>>();
         let mut iter = s.iter();
         let x = iter.next().unwrap().parse::<i32>().unwrap();
         let y = iter.next().unwrap().parse::<i32>().unwrap();
         let z = iter.next().unwrap().parse::<i32>().unwrap();
-        return Beacon {x: x, y: y, z: z};
+        return Point {x: x, y: y, z: z};
     }
 
-    fn add(self, v: &Beacon) -> Beacon {
-        return Beacon{ x: self.x + v.x, y: self.y + v.y, z: self.z + v.z };
+    fn add(self, v: &Point) -> Point {
+        return Point{ x: self.x + v.x, y: self.y + v.y, z: self.z + v.z };
     }
 
-    fn subtract(self, v: &Beacon) -> Beacon {
-        return Beacon{ x: self.x - v.x, y: self.y - v.y, z: self.z - v.z };
+    fn subtract(self, v: &Point) -> Point {
+        return Point{ x: self.x - v.x, y: self.y - v.y, z: self.z - v.z };
     }
 
-    fn rotate(&self, rotation: usize) -> Beacon {
+    fn rotate(&self, rotation: usize) -> Point {
         let rotated = match rotation {
             0  => ( self.x,  self.y,  self.z),
             1  => ( self.x,  self.z, -self.y),
@@ -86,26 +88,30 @@ impl Beacon {
             23 => (-self.z, -self.y, -self.x),
             _ => unreachable!()
         };
-        return Beacon{ x: rotated.0, y: rotated.1, z: rotated.2 }
+        return Point{ x: rotated.0, y: rotated.1, z: rotated.2 }
+    }
+
+    fn manhattan_distance(&self, other: &Point) -> i32 {
+        return i32::abs(self.x - other.x) + i32::abs(self.y - other.y) + i32::abs(self.z - other.z);
     }
 }
 
-impl fmt::Display for Beacon {
+impl fmt::Display for Point {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}, {}, {})", self.x, self.y, self.z)
     }
 }
 
-impl Ord for Beacon {
-    fn cmp(&self, other: &Beacon) -> Ordering {
+impl Ord for Point {
+    fn cmp(&self, other: &Point) -> Ordering {
         self.x.cmp(&other.x)
             .then_with(|| self.y.cmp(&other.y))
             .then_with(|| self.z.cmp(&other.z))
     }
 }
 
-impl PartialOrd for Beacon {
-    fn partial_cmp(&self, other: &Beacon) -> Option<Ordering> {
+impl PartialOrd for Point {
+    fn partial_cmp(&self, other: &Point) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
@@ -113,46 +119,90 @@ impl PartialOrd for Beacon {
 
 impl Scanner {
     fn new(lines: Vec<String>) -> Self {
-        let mut scanner = Scanner{name: lines[0].to_string(), beacons: vec!()};
+        let mut scanner = Scanner{name: lines[0].to_string(), becons: vec!(), location: Point{x:0,y:0,z:0}};
 
         for line in &lines[1..] {
-            scanner.beacons.push(Beacon::new(line));
+            scanner.becons.push(Point::new(line));
         }
         return scanner
     }
 
+    fn rotate_and_locate(&mut self, rotation: usize, location: Point) {
+        self.location = location;
+        for i in 0..self.becons.len() {
+            self.becons[i] = self.becons[i].rotate(rotation).add(&location);
+        }
+    }
 
-    fn matching_sets(&self, other: &Scanner, threshold: usize) -> Vec<DistanceMatch> {
-        let mut matching_sets: Vec<DistanceMatch> = vec!();
-        // compare every beacon relative to the other scanners beacons
+    fn matching_sets(&self, other: &Scanner, threshold: usize) -> Option<(usize, Point, Vec<DistanceMatch>)> {
+        let mut matching_becons: Vec<DistanceMatch> = vec!();
+        // compare every Point relative to the other scanners Points
         // find the largest matching distance set
-        // as well as rotating b across all 24 axis
-        for i in 0..self.beacons.len() {
-            let target_distances = self.distances_from(i, 0);
-            for rotation in 0..24 {
-                for j in 0..other.beacons.len() {
-                    let other_distances = other.distances_from(j, rotation);
-                    let num_matched = intersection_count_sorted_vec(&target_distances,&other_distances);
-                    if num_matched + 1 >= threshold {
-                        matching_sets.push(DistanceMatch{num_matched: num_matched, a_beacon_idx: i, b_beacon_idx: j, b_rotation: rotation })
-                    }
+        for i in 0..self.becons.len() {
+            let target_distances = self.distances_from(i);
+            for j in 0..other.becons.len() {
+                let other_distances = other.distances_from(j);
+                let num_matched = intersection_count_sorted_vec(&target_distances, &other_distances) + 1; //assume two points we picked match
+                if num_matched >= threshold {
+                    matching_becons.push(DistanceMatch{num_matched: num_matched, a_Point_idx: i, b_Point_idx: j, b_rotation: 0});
                 }
+
             }
         }
-        return matching_sets;
+
+        // find correct rotation based upon offset of all matching pairs
+        // until all of them are equal
+        let mut distance_map: HashMap<Point,u32> = HashMap::new();
+        for rotation in 0..24 {
+            'pairs: for pair in &matching_becons {
+                distance_map.entry(self.becons[pair.a_Point_idx].subtract(&other.becons[pair.b_Point_idx].rotate(rotation)))
+                            .and_modify(|num_same| *num_same += 1).or_insert(1);
+                if distance_map.len() > 1 {
+                    break 'pairs;  // all must be equadistant
+                }
+            }
+            if distance_map.len() == 1 {
+                // we found our correct rotation, rotate all other points by the rotation
+                // since we start with zero, everything will eventually end up rotated
+                // correctly relative to zero
+                for i in 0..matching_becons.len() {
+                    matching_becons[i].b_rotation = rotation;
+                }
+                // Figure out position of other scanner relative to use
+                let other_location = self.becons[matching_becons[0].a_Point_idx]
+                        .subtract(&other.becons[matching_becons[0].b_Point_idx].rotate(rotation));
+
+                return Some((rotation, other_location, matching_becons));
+            }
+            else 
+            {
+                // maybe next rotation
+                distance_map.clear();
+            }
+        }
+        
+        return None
     }
     
-    fn distances_from(&self, idx: usize, rotation: usize) -> Vec<u64> {
-        let mut distances: Vec<u64> = self.beacons.iter().enumerate().filter(|&(i,_)| i != idx).map(|(_,v)| {
-            euclid_distance(&self.beacons[idx], &Beacon::rotate(v, rotation))
+    fn distances_from(&self, idx: usize) -> Vec<u64> {
+        let mut distances: Vec<u64> = self.becons.iter().enumerate().filter(|&(i,_)| i != idx).map(|(_,v)| {
+            euclid_distance(&self.becons[idx], &v)
         }).collect::<Vec<u64>>();
         distances.sort();
         return distances;
     }
+
+    fn merge(&mut self, other_becons: &Vec<Point>){
+        for v in other_becons {
+            if !self.becons.contains(v) {
+                self.becons.push(v.clone());
+            }
+        }
+    }
 }
 
 
-fn euclid_distance(u: &Beacon, v: &Beacon) -> u64 {
+fn euclid_distance(u: &Point, v: &Point) -> u64 {
     return ((u.x as f64 - v.x as f64).powf(2.0) + (u.y as f64 - v.y as f64).powf(2.0) + (u.z as f64 - v.z as f64).powf(2.0)) as u64;
 }
 
@@ -175,10 +225,30 @@ fn intersection_count_sorted_vec(a: &Vec<u64>, b: &Vec<u64>) -> usize {
     count
 }
 
-fn relative_scanner_location(a: &Beacon, b: &Beacon) -> Beacon {
-    return b.subtract(a);
-    //return &a.add(&a.subtract(&b));
+fn normalize(scanners: &mut Vec<Scanner>) {
+    let mut work_queue: Vec<usize> = vec!();
+    let mut finished: HashMap<usize,bool> = HashMap::new();
+    finished.insert(0, true);
+    work_queue.push(0);
+    
+    while let Some(a) = work_queue.pop() {
+        for b in (0..scanners.len()).filter(|&b| b != a && !finished.contains_key(&b)).collect::<Vec<usize>>() {
+            match &scanners[a].matching_sets(&scanners[b], 12) {
+                None => (),
+                Some((rotation, b_location, pairs)) => {
+                    &scanners[b].rotate_and_locate(*rotation, *b_location);
+                    // add all of becons to scanner, since we know their relative location
+                    let b_becons = scanners[b].becons.clone();
+                    &scanners[0].merge(&(b_becons));
+                    println!("Scanner {}, location {}", b, b_location);
+                    work_queue.push(b);
+                    finished.insert(b, true);
+                } 
+            }
+        }
+    }
 }
+
 
 fn main() {
     let start = Instant::now();
@@ -200,23 +270,19 @@ fn main() {
 
     let mut scanners: Vec<Scanner> = scanner_lines.iter().map(|lines| Scanner::new(lines.to_vec())).collect();
 
-    for a in 0..scanners.len() {
-        for b in a+1..scanners.len() {
-            let sets = &scanners[a].matching_sets(&scanners[b], 12);
-            println!("{}", sets.len());
-            for set in sets {
-                //println!("Match set {} - {}, matched: {}, rotation: {}:", scanners[a].name, scanners[b].name, set.num_matched, set.b_rotation);
-                let scanner_b_location = relative_scanner_location(&scanners[a].beacons[set.a_beacon_idx], &Beacon::rotate(&scanners[b].beacons[set.b_beacon_idx], set.b_rotation));
-                //println!("Scanner {} relative to {}: {}", a, b, scanner_b_location);
-            }
-        }
-    }
+    normalize(&mut scanners);
 
     println!("Part 1\r\n{}", "-".repeat(10));
-    // todo
+    println!("Number of becons: {}", scanners[0].becons.len());
+
+    let mut scanner_distances: Vec<i32> = vec!();
+    for a in 0..scanners.len() {
+        for b in a+1..scanners.len() {
+            scanner_distances.push(scanners[a].location.manhattan_distance(&scanners[b].location));        }
+    }
 
     println!("Part 2\r\n{}", "-".repeat(10));
-    // todo
+    println!("Max distance: {}", scanner_distances.into_iter().max().unwrap());
 
     let duration = start.elapsed();
     println!("Total execution time: {:?}", duration);
